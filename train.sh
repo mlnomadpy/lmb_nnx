@@ -8,6 +8,9 @@ pip install -r requirements.txt
 WORKDIR="output"
 mkdir -p $WORKDIR
 
+# Force TensorFlow to only use CPU, preventing conflicts with JAX on the TPU.
+export CUDA_VISIBLE_DEVICES=""
+
 # Run training
 python main.py \
   --workdir=$WORKDIR \
