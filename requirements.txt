@@ -3,3 +3,4 @@ tensorflow-cpu
 tensorflow-text
 datasets
 transformers
+clu 
