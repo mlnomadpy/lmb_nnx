@@ -21,9 +21,6 @@ from typing import List
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
-import tokenizer
-from clu import deterministic_data
 from configs import default
 from datasets import load_dataset
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
@@ -79,10 +76,10 @@ def get_huggingface_dataset(
 ) -> tf.data.Dataset:
   """Loads a Hugging Face dataset and converts it to a tf.data.Dataset."""
   ds = load_dataset(
-    config.hf_dataset,
-    name=config.hf_dataset_config_name,
+    config.dataset_name,
+    name=config.dataset_config_name,
     split=split,
-    streaming=config.hf_dataset_streaming,
+    streaming=config.dataset_streaming,
   )
 
   def normalize_features(features):
@@ -106,44 +103,6 @@ def get_huggingface_dataset(
     ds_generator, output_signature=output_signature
   )
   return tf_ds
-
-
-class NormalizeFeatureNamesOp:
-  """Normalizes feature names to 'inputs' and 'targets'."""
-
-  def __init__(self, ds_info: tfds.core.DatasetInfo):
-    self.ds_info = ds_info
-
-  def __call__(self, features: Features) -> Features:
-    features['inputs'] = features.pop('text')
-    # Unnecessary step used for uniformizing with examples/wmt.
-    features['targets'] = features['inputs']
-    return features
-
-
-def get_raw_dataset(
-  dataset_builder: tfds.core.DatasetBuilder, split: str
-) -> tf.data.Dataset:
-  """Loads a raw text dataset and normalizes feature keys.
-
-  Args:
-    dataset_builder: TFDS dataset builder that can build `split`.
-    split: Split to use. This must be the full split. We shard the split across
-      multiple hosts and currently don't support sharding subsplits.
-
-  Returns:
-    Dataset with source and target language features mapped to 'inputs' and
-    'targets'.
-  """
-  num_examples = dataset_builder.info.splits[split].num_examples
-  per_host_split = deterministic_data.get_read_instruction_for_host(
-    split, num_examples, drop_remainder=False
-  )
-  ds = dataset_builder.as_dataset(split=per_host_split, shuffle_files=False)
-  ds = ds.map(
-    NormalizeFeatureNamesOp(dataset_builder.info), num_parallel_calls=AUTOTUNE
-  )
-  return ds
 
 
 def pack_dataset(
@@ -402,83 +361,20 @@ def get_datasets(
   config: default.Config,
   *,
   n_devices: int,
-  vocab_path: str | None = None,
 ):
   """Load and return dataset of batched examples for use during training."""
-  if config.hf_dataset:
-    # Use HuggingFace datasets.
-    hf_tokenizer = AutoTokenizer.from_pretrained(
-      config.hf_tokenizer, use_fast=True
-    )
-    encoder = HFTokenizer(hf_tokenizer)
-
-    train_data = get_huggingface_dataset(config, config.hf_train_split)
-    eval_data = get_huggingface_dataset(config, config.hf_eval_split)
-
-    tokenize_op = HFTokenizeOp(encoder)
-    train_data = train_data.map(tokenize_op, num_parallel_calls=AUTOTUNE)
-    eval_data = eval_data.map(tokenize_op, num_parallel_calls=AUTOTUNE)
-
-    batch_size = config.per_device_batch_size * n_devices
-    if config.eval_per_device_batch_size > 0:
-      eval_batch_size = config.eval_per_device_batch_size * n_devices
-    else:
-      eval_batch_size = batch_size
-
-    train_ds = preprocess_data(
-      train_data,
-      shuffle=True,
-      num_epochs=None,
-      pack_examples=True,
-      batch_size=batch_size,
-      max_length=config.max_target_length,
-      shuffle_buffer_size=config.shuffle_buffer_size,
-    )
-
-    eval_ds = preprocess_data(
-      eval_data,
-      shuffle=False,
-      pack_examples=False,
-      batch_size=eval_batch_size,
-      max_length=config.max_eval_target_length,
-    )
-
-    predict_ds = preprocess_data(
-      eval_data,
-      shuffle=False,
-      pack_examples=False,
-      batch_size=eval_batch_size,
-      max_length=config.max_predict_length,
-      drop_remainder=False,
-    )
-
-    return train_ds, eval_ds, predict_ds, encoder
-
-  if vocab_path is None:
-    vocab_path = os.path.expanduser('~/lm1b_sentencepiece_model')
-
-  train_ds_builder = tfds.builder(config.dataset_name)
-  train_data = get_raw_dataset(train_ds_builder, 'train')
-
-  if config.eval_dataset_name:
-    eval_ds_builder = tfds.builder(config.eval_dataset_name)
-  else:
-    eval_ds_builder = train_ds_builder
-  eval_data = get_raw_dataset(eval_ds_builder, config.eval_split)
-
-  # Tokenize data.
-  sp_tokenizer = tokenizer.load_or_train_tokenizer(
-    train_data,
-    vocab_path=vocab_path,
-    vocab_size=config.vocab_size,
-    max_corpus_chars=config.max_corpus_chars,
+  # Use HuggingFace datasets.
+  hf_tokenizer = AutoTokenizer.from_pretrained(
+    config.tokenizer_name, use_fast=True
   )
-  train_data = train_data.map(
-    tokenizer.TokenizeOp(sp_tokenizer), num_parallel_calls=AUTOTUNE
-  )
-  eval_data = eval_data.map(
-    tokenizer.TokenizeOp(sp_tokenizer), num_parallel_calls=AUTOTUNE
-  )
+  encoder = HFTokenizer(hf_tokenizer)
+
+  train_data = get_huggingface_dataset(config, config.train_split)
+  eval_data = get_huggingface_dataset(config, config.eval_split)
+
+  tokenize_op = HFTokenizeOp(encoder)
+  train_data = train_data.map(tokenize_op, num_parallel_calls=AUTOTUNE)
+  eval_data = eval_data.map(tokenize_op, num_parallel_calls=AUTOTUNE)
 
   batch_size = config.per_device_batch_size * n_devices
   if config.eval_per_device_batch_size > 0:
@@ -493,6 +389,7 @@ def get_datasets(
     pack_examples=True,
     batch_size=batch_size,
     max_length=config.max_target_length,
+    shuffle_buffer_size=config.shuffle_buffer_size,
   )
 
   eval_ds = preprocess_data(
@@ -512,4 +409,4 @@ def get_datasets(
     drop_remainder=False,
   )
 
-  return train_ds, eval_ds, predict_ds, sp_tokenizer
+  return train_ds, eval_ds, predict_ds, encoder

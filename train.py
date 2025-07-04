@@ -390,17 +390,11 @@ def train_and_evaluate(config: default.Config, workdir: str):
   workdir = os.path.abspath(workdir)
   tf.io.gfile.makedirs(workdir)
 
-  vocab_path = config.vocab_path
-  if vocab_path is None:
-    vocab_path = os.path.join(workdir, 'sentencepiece_model')
-    config.vocab_path = vocab_path
-  tf.io.gfile.makedirs(os.path.split(vocab_path)[0])
-
   # Load Dataset
   # ---------------------------------------------------------------------------
   logging.info('Initializing dataset.')
   train_ds, eval_ds, _, encoder = input_pipeline.get_datasets(
-    n_devices=jax.local_device_count(), config=config, vocab_path=vocab_path
+    n_devices=jax.local_device_count(), config=config
   )
 
   train_iter = iter(train_ds)

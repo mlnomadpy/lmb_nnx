@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import dataclasses
+from ml_collections import config_dict
 
 
 @dataclasses.dataclass(unsafe_hash=True)
@@ -145,25 +146,85 @@ class Config:
 
 def get_config():
   """Get the default hyperparameter configuration."""
-  config = Config()
-  config.checkpoint_every_steps = 1000
-  config.eval_every_steps = 1000
+  config = config_dict.ConfigDict()
+
+  # Each host is responsible for a fixed subset of data
+  config.data_sharding = ('data',)
 
   # Path to directory with training data.
-  config.dataset_name = 'lm1b'
-  config.eval_dataset_name = ''  # If empty, use `dataset_name`.
-  config.eval_split = 'test'
-  # HuggingFace dataset parameters. If hf_dataset is set, it will be used.
-  config.hf_dataset = ''
-  config.hf_dataset_config_name = None
-  config.hf_train_split = 'train'
-  config.hf_eval_split = 'validation'
-  config.hf_dataset_streaming = True
-  config.hf_tokenizer = ''
+  config.dataset_name = ''
+  config.dataset_config_name = None
+  config.dataset_streaming = True
+  config.train_split = 'train'
+  config.eval_split = 'validation'
   config.text_column_name = 'text'
 
-  # Path to SentencePiece vocabulary file.
-  # Only used if hf_tokenizer is not set.
-  config.vocab_path = None
+  # Hugging Face tokenizer
+  config.tokenizer_name = ''
 
+  # Per-host batch size for training.
+  config.per_device_batch_size = 32
+  # Per-host batch size for training.
+  config.eval_per_device_batch_size = 32
+
+  # Enable pulling of training data from GCS.
+  config.gcs_path = ''
+
+  # Frequency of checkpoints.
+  config.checkpoint_every_steps = 10_000
+
+  # Frequency of eval during training.
+  config.eval_every_steps = 1000
+
+  # Use bfloat16 for training.
+  config.use_bfloat16 = True
+
+  # See models.TransformerConfig for details.
+  config.emb_dim = 1024
+  config.num_heads = 16
+  config.num_layers = 10
+  config.qkv_dim = 1024
+  config.mlp_dim = 4096
+  config.max_len = 512
+  config.dropout_rate = 0.1
+  config.attention_dropout_rate = 0.1
+
+  config.num_train_steps = 1_000_000
+  config.num_eval_steps = -1
+  config.num_predict_steps = -1
+
+  config.max_target_length = 512
+  config.max_eval_target_length = 512
+  config.max_predict_length = 512
+
+  config.learning_rate = 0.001
+  config.warmup_steps = 10_000
+  config.weight_decay = 0.1
+
+  config.prompts = (
+      'The quick brown fox jumps over the lazy dog. The quick brown fox jumps '
+      'over the lazy dog. The quick brown fox jumps over the lazy dog. The '
+      'quick brown fox jumps over the lazy dog. The quick brown fox jumps '
+      'over the lazy dog. '
+  )
+  config.sampling_temperature = 0.6
+  config.sampling_top_k = 20
+  config.seed = 0
+
+  config.restore_checkpoints = True
+  config.save_checkpoints = True
+
+  # Mesh definition
+  config.mesh_axes = ('data', 'fsdp', 'tensor')
+
+  # Model parallelism
+  config.ici_tensor_parallelism = -1
+  config.ici_fsdp_parallelism = -1
+  config.ici_data_parallelism = -1
+
+  config.dcn_tensor_parallelism = -1
+  config.dcn_fsdp_parallelism = -1
+  config.dcn_data_parallelism = -1
+
+  config.shuffle_buffer_size = 1024
   return config
