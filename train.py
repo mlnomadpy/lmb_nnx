@@ -22,10 +22,10 @@ This script trains a Transformer on a LM1B dataset.
 
 import dataclasses
 import os
-
-import input_pipeline
 import jax
 import jax.numpy as jnp
+
+import input_pipeline
 import models
 import numpy as np
 import optax
