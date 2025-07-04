@@ -4,3 +4,4 @@ tensorflow-text
 datasets
 transformers
 clu 
+tensorflow-datasets==4.9.2
