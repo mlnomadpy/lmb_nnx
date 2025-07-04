@@ -1,7 +1,11 @@
-sentencepiece
-tensorflow-cpu
-tensorflow-text
+absl-py==1.4.0
+clu==0.0.9
+ml-collections==0.1.1
+numpy==1.24.3
+optax==0.1.5
+sentencepiece==0.1.99
+tensorflow==2.13.0
+tensorflow-datasets==4.9.2
+tensorflow-text==2.13.0
 datasets
 transformers
-clu 
-tensorflow-datasets==4.9.2
